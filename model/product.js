@@ -1,6 +1,7 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/db.js";
 import User from "./user.js";
+import Category from "./category.js";
 
 const Product = sequelize.define(
   "Products",
@@ -12,6 +13,14 @@ const Product = sequelize.define(
     description: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    category_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: Category,
+        key: "id",
+      },
     },
     price: {
       type: DataTypes.FLOAT,
@@ -29,6 +38,12 @@ const Product = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    tags: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      allowNull: true,
+      defaultValue: [],
+    },
+
     vendor_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -64,5 +79,14 @@ const Product = sequelize.define(
     tableName: "Products",
   }
 );
+Product.belongsTo(Category, {
+  foreignKey: "category_id",
+  as: "category",
+});
+
+Product.belongsTo(User, {
+  foreignKey: "vendor_id",
+  as: "vendor",
+});
 
 export default Product;

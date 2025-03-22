@@ -1,22 +1,28 @@
 import Product from "../model/product.js";
 import Vendor from "../model/user.js";
 import Media from "../model/media.js";
+import Category from "../model/category.js";
+import User from "../model/user.js";
 
 export const createProduct = async (req, res) => {
   try {
     const {
       product_name,
       description,
+      category_id, // Added category_id
       price,
       gst_percentage,
       minimum_order_quantity,
       available_stock,
       vendor_id,
+      tags,
     } = req.body;
 
+    // Validate required fields
     if (
       !product_name ||
       !description ||
+      !category_id || // Added category_id validation
       !price ||
       !gst_percentage ||
       !minimum_order_quantity ||
@@ -29,6 +35,7 @@ export const createProduct = async (req, res) => {
       });
     }
 
+    // Validate numeric values
     if (
       price <= 0 ||
       gst_percentage < 0 ||
@@ -41,14 +48,44 @@ export const createProduct = async (req, res) => {
       });
     }
 
+    // Check if category exists
+    const categoryExists = await Category.findByPk(category_id);
+    if (!categoryExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    // Validate tags if provided
+    let processedTags = [];
+    if (tags) {
+      // If tags is a string (comma-separated), convert to array
+      if (typeof tags === "string") {
+        processedTags = tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag);
+      }
+      // If tags is already an array
+      else if (Array.isArray(tags)) {
+        processedTags = tags
+          .map((tag) => (typeof tag === "string" ? tag.trim() : String(tag)))
+          .filter((tag) => tag);
+      }
+    }
+
+    // Create the product
     const newProduct = await Product.create({
       product_name,
       description,
+      category_id,
       price,
       gst_percentage,
       minimum_order_quantity,
       available_stock,
-      vendor_id: vendor_id,
+      vendor_id,
+      tags: processedTags,
       created_by: req.user.id,
       update_by: req.user.id,
     });
@@ -59,6 +96,7 @@ export const createProduct = async (req, res) => {
       data: newProduct,
     });
   } catch (error) {
+    console.error("Error creating product:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to add product",
@@ -72,21 +110,43 @@ export const getAllProducts = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const search = req.query.search || "";
 
+    // Build where clause for search
+    const whereClause = {
+      is_active: true,
+      ...(search && {
+        [Op.or]: [
+          { product_name: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+        ],
+      }),
+    };
+
+    // Get products with pagination
     const { count, rows: products } = await Product.findAndCountAll({
-      where: { is_active: true },
-      limit: limit,
-      offset: offset,
+      where: whereClause,
+      limit,
+      offset,
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["id", "category_name"],
+        },
+        {
+          model: User,
+          as: "vendor",
+          attributes: ["id", "name"],
+        },
+      ],
       order: [["createdAt", "DESC"]],
     });
 
-    const productsWithVendorAndImages = await Promise.all(
+    // Get media for each product
+    const productsWithImages = await Promise.all(
       products.map(async (product) => {
-        // Get vendor information
-        const vendor = await Vendor.findOne({
-          where: { id: product.vendor_id },
-          attributes: ["name"],
-        });
+        const productJSON = product.toJSON();
 
         // Get images from media table for this product
         const images = await Media.findAll({
@@ -94,20 +154,11 @@ export const getAllProducts = async (req, res) => {
             product_id: product.id,
             is_active: true,
           },
-          attributes: ["product_id", "name"],
+          attributes: ["id", "product_id", "name"],
         });
 
-        const productJSON = product.toJSON();
-        productJSON.vendor_name = vendor ? vendor.name : null;
-
         // Add images to the product
-        productJSON.images = images.map((image) => image.toJSON());
-
-        // Add a primary image property for convenience
-        const primaryImage = images.find((img) => img.is_primary) || images[0];
-        productJSON.primary_image = primaryImage
-          ? primaryImage.file_path
-          : null;
+        productJSON.media = images.map((image) => image.toJSON());
 
         return productJSON;
       })
@@ -118,7 +169,7 @@ export const getAllProducts = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        products: productsWithVendorAndImages,
+        products: productsWithImages,
         pagination: {
           currentPage: page,
           totalPages,
@@ -221,6 +272,7 @@ export const updateProduct = async (req, res) => {
       minimum_order_quantity,
       available_stock,
       vendor_id,
+      tags,
     } = req.body;
 
     const product = await Product.findOne({
@@ -245,6 +297,7 @@ export const updateProduct = async (req, res) => {
       minimum_order_quantity,
       available_stock,
       vendor_id,
+      tags,
       update_by: req.user.id,
     });
 

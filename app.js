@@ -6,6 +6,7 @@ import productRouter from "./routes/productRoutes.js";
 import userRouter from "./routes/userRoutes.js";
 import mediaRouter from "./routes/mediaRoutes.js";
 import SharedProductCollectionRouter from "./routes/sharedcollectionRoutes.js";
+import categoryRouter from "./routes/categoryRoutes.js";
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use("/api/products", productRouter);
 app.use("/api/users", userRouter);
 app.use("/api/media", mediaRouter);
 app.use("/api/sharedcollection", SharedProductCollectionRouter);
+app.use("/api/category", categoryRouter);
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
